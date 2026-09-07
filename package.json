@@ -36,6 +36,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "build": "node -c src/index.js src/client.js",
     "test": "node test/run-in-process.js && node test/e2e-review.test.js",
     "test:unit": "node test/index.test.js",
     "test:e2e": "node test/e2e-review.test.js"
