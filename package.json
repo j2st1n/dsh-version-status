@@ -1,0 +1,43 @@
+{
+  "name": "dsh-version-status",
+  "version": "0.1.4",
+  "description": "DSH core version monitor & upgrade helper: sidebar status badge, npm release checker, and one-click update command",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "update-notifier",
+    "version-checker",
+    "upgrade-helper"
+  ],
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node test/run-in-process.js && node test/e2e-review.test.js",
+    "test:unit": "node test/index.test.js",
+    "test:e2e": "node test/e2e-review.test.js"
+  }
+}

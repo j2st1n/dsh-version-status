@@ -1,0 +1,6 @@
+# dsh-version-status bundle patch: adds the host version notifier service.
+# The client half joins the browser graph automatically because package.json declares
+# dsh.client and exports "./client".
+- insert:
+    - id: version-status
+      name: dsh-version-status
