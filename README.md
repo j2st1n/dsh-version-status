@@ -1,5 +1,8 @@
 # dsh-version-status
 
+[![npm](https://img.shields.io/npm/v/dsh-version-status?color=blue)](https://www.npmjs.com/package/dsh-version-status)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+
 > DeepSeek Harness (DSH) 核心版本监控与一键升级助手插件：在 Web GUI 侧边栏底部常驻恒定显示当前运行版本，支持 GitHub Releases 与 npm registry 双源探测识别最新预发布版本（如 `0.1.3-alpha.1`），支持「稳定版 (Latest)」与「尝鲜版 (Alpha)」双通道切换与严格版本对比，检测到新版本时以琥珀色呼吸灯与 UPGRADE 徽标提醒（胶囊文字不被所选 tab 绑架），点击展开版本详情卡片并支持一键复制对齐官方规范的升级与容灾 Tarball 命令。与 `dsh-cpa-status`、`dsh-opencode-status` 采用 1:1 像素级统一视觉规格。
 
 ---
@@ -32,11 +35,11 @@
    - **双层剪贴板容错**：优先使用现代化 `navigator.clipboard` API，在非 HTTPS/受限沙箱下自动降级到 `document.execCommand('copy')`，全平台 100% 复制成功率；
    - **快捷入口**：提供直达 GitHub Releases 页面与「🔄 立即检查」手动穿透刷新按钮。
 
-3. **双端协同架构（Host / Client 分工）**：
+4. **双端协同架构（Host / Client 分工）**：
    - **Host 端（Node.js / Cordis）**：轻量请求官方 Registry `/-/package/@deepseek-ai/dsh/dist-tags` 端点，单次网络请求（<100 字节）即可一次性嗅探所有发布通道；支持淘宝镜像（npmmirror）与官方 npmjs 双源自动故障切换，暴露 `/api/dsh-version` 接口；
    - **Client 端（原生 React）**：零构建步骤（Zero-build），完全复用 DSH 原生 Design Tokens（`--dsw-alias-bg-layer-2` 等变量），完美适配深色/浅色与第三方主题。
 
-4. **网络弹性与离线容灾**：
+5. **网络弹性与离线容灾**：
    - 探测单次请求严格限制在 3.5 秒超时以内，离线或断网情况下平滑降级，绝不阻塞 DSH 宿主启动与 Web 客户端首次渲染；
    - 内置 15 分钟 TTL 内存缓存，避免频繁穿透请求 npm 触发限流；支持 `?force=1` 强制刷新。
 
@@ -52,7 +55,19 @@
 dsh plugin --profile web add dsh-version-status
 ```
 
-### 2. 重启生效
+### 2. GitHub 仓库直接安装
+
+在终端中执行：
+
+```sh
+dsh plugin --profile web add github:j2st1n/dsh-version-status
+```
+
+> **说明**：
+> - 无需手动指定版本号，默认拉取最新发布代码；
+> - 本插件为**纯原生 JS 零构建（Zero-build）**架构，无打包与编译步骤，安装后重启 `dsh web` 即可立即生效。
+
+### 3. 重启生效
 
 安装完成后，重启 `dsh web` 实例刷新浏览器页面即可生效：
 
@@ -60,7 +75,7 @@ dsh plugin --profile web add dsh-version-status
 dsh web
 ```
 
-### 3. 卸载命令
+### 4. 卸载命令
 
 如需卸载，执行：
 
@@ -75,14 +90,16 @@ dsh plugin --profile web remove dsh-version-status
 ```text
 dsh-version-status/
 ├── cordis.patch.yml       # Cordis 服务插槽补丁
-├── package.json           # 模块配置与 exports 映射 (v0.1.3)
+├── package.json           # 模块配置与 exports 映射 (v0.1.5)
+├── LICENSE                # MIT 开源许可证
 ├── README.md              # 插件说明文档
 ├── src/
 │   ├── index.js           # Host 端服务、dist-tags 嗅探与版本比对逻辑
 │   └── client.js          # Client 端侧边栏胶囊与双通道弹窗组件
 └── test/
-    ├── client.test.js     # Client 端虚拟沙箱与剪贴板降级测试
-    └── run-in-process.js  # 全量自动化测试套件
+    ├── index.test.js      # Host 端单元测试与函数级校验
+    ├── e2e-review.test.js # 端到端配置对齐与协议规范验证
+    └── run-in-process.js  # 自动化测试编排执行器
 ```
 
 ---

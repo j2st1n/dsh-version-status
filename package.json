@@ -1,6 +1,6 @@
 {
   "name": "dsh-version-status",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "DSH core version monitor & upgrade helper: sidebar status badge, npm release checker, and one-click update command",
   "type": "module",
   "license": "MIT",
@@ -10,7 +10,8 @@
     "dsh-plugin",
     "update-notifier",
     "version-checker",
-    "upgrade-helper"
+    "upgrade-helper",
+    "status-panel"
   ],
   "exports": {
     ".": "./src/index.js",
@@ -20,6 +21,7 @@
   "files": [
     "src",
     "cordis.patch.yml",
+    "LICENSE",
     "README.md"
   ],
   "dsh": {
@@ -32,6 +34,12 @@
     }
   },
   "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/j2st1n/dsh-version-status.git"
+  },
+  "homepage": "https://github.com/j2st1n/dsh-version-status#readme",
+  "bugs": "https://github.com/j2st1n/dsh-version-status/issues",
   "engines": {
     "node": ">=20"
   },
