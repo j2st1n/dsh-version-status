@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import http from 'node:http'
+import zlib from 'node:zlib'
 import {
   parseSemver,
   compareSemver,
@@ -7,6 +9,7 @@ import {
   buildUpgradeCommands,
   detectLocalVersion,
   VersionService,
+  safeFetchJson,
   sendJson,
   apply,
   name,
@@ -150,3 +153,46 @@ test('apply Cordis plugin registration and route invocation', async () => {
   assert.equal(responseData.ok, false)
   assert.equal(responseData.error.code, 'METHOD_NOT_ALLOWED')
 })
+
+test('safeFetchJson handles gzipped payload without content-encoding header', async () => {
+  const payload = { test: true, version: '1.2.3', list: [1, 2, 3] }
+  const gzipped = zlib.gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'))
+
+  const server = http.createServer((req, res) => {
+    // Deliberately omit content-encoding header to simulate proxy strip/bug
+    res.writeHead(200, {
+      'content-type': 'application/json'
+    })
+    res.end(gzipped)
+  })
+
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  const port = server.address().port
+
+  try {
+    const res = await safeFetchJson(`http://127.0.0.1:${port}/test`)
+    assert.deepEqual(res, payload)
+  } finally {
+    server.close()
+  }
+})
+
+test('safeFetchJson throws on non-200 HTTP responses', async () => {
+  const server = http.createServer((req, res) => {
+    res.writeHead(404, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ error: 'not found' }))
+  })
+
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  const port = server.address().port
+
+  try {
+    await assert.rejects(
+      async () => safeFetchJson(`http://127.0.0.1:${port}/notfound`),
+      /HTTP 404/
+    )
+  } finally {
+    server.close()
+  }
+})
+

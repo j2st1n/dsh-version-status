@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import zlib from 'node:zlib'
 import { execSync } from 'node:child_process'
 
 export const name = 'update-notifier'
@@ -225,6 +226,45 @@ export function detectLocalVersion() {
 }
 
 /**
+ * Safe fetch JSON helper:
+ * 1. Explicitly sets 'accept-encoding': 'identity' to request uncompressed payload.
+ * 2. Checks raw buffer for Gzip magic bytes (0x1F, 0x8B) and automatically decompresses with zlib.
+ * This defends against proxy/agent setups (e.g. Surge/undici bridge) where Content-Encoding headers
+ * are lost or stripped, preventing SyntaxError: Unexpected token '\x1f'.
+ * @param {string} url
+ * @param {RequestInit} [options]
+ * @returns {Promise<any>}
+ */
+export async function safeFetchJson(url, options = {}) {
+  const customHeaders = options.headers || {}
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'accept-encoding': 'identity',
+      ...customHeaders
+    }
+  })
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText} (${url})`)
+  }
+
+  const arrayBuffer = await res.arrayBuffer()
+  const buf = Buffer.from(arrayBuffer)
+  let dataBuf = buf
+
+  if (buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b) {
+    try {
+      dataBuf = zlib.gunzipSync(buf)
+    } catch {
+      // Keep original buffer if gunzip fails
+    }
+  }
+
+  return JSON.parse(dataBuf.toString('utf8'))
+}
+
+/**
  * Fetch all dist-tags from npm registry endpoints with dual-source fallback.
  * @param {object} [options]
  * @param {string[]} [options.endpoints]
@@ -238,20 +278,14 @@ export async function fetchDistTags(options = {}) {
 
   for (const url of endpoints) {
     try {
-      const res = await fetch(url, {
+      const data = await safeFetchJson(url, {
         headers: {
           accept: 'application/json',
-          'user-agent': 'dsh-version-status/0.1.4'
+          'user-agent': 'dsh-version-status/0.1.8'
         },
         signal: AbortSignal.timeout(timeout)
       })
 
-      if (!res.ok) {
-        lastError = new Error(`Registry HTTP ${res.status}: ${res.statusText} (${url})`)
-        continue
-      }
-
-      const data = await res.json()
       if (data && typeof data === 'object' && (typeof data.latest === 'string' || typeof data.alpha === 'string')) {
         return {
           distTags: data,
@@ -293,20 +327,14 @@ export async function fetchLatestVersion(options = {}) {
 
   for (const url of endpoints) {
     try {
-      const res = await fetch(url, {
+      const data = await safeFetchJson(url, {
         headers: {
           accept: 'application/json',
-          'user-agent': 'dsh-version-status/0.1.4'
+          'user-agent': 'dsh-version-status/0.1.8'
         },
         signal: AbortSignal.timeout(timeout)
       })
 
-      if (!res.ok) {
-        lastError = new Error(`Registry HTTP ${res.status}: ${res.statusText} (${url})`)
-        continue
-      }
-
-      const data = await res.json()
       if (data && typeof data.version === 'string') {
         return {
           version: data.version.trim(),
@@ -336,20 +364,14 @@ export async function fetchGitHubReleases(options = {}) {
 
   for (const url of endpoints) {
     try {
-      const res = await fetch(url, {
+      const data = await safeFetchJson(url, {
         headers: {
           accept: 'application/vnd.github+json',
-          'user-agent': 'dsh-version-status/0.1.4'
+          'user-agent': 'dsh-version-status/0.1.8'
         },
         signal: AbortSignal.timeout(timeout)
       })
 
-      if (!res.ok) {
-        lastError = new Error(`GitHub API HTTP ${res.status}: ${res.statusText} (${url})`)
-        continue
-      }
-
-      const data = await res.json()
       if (!Array.isArray(data)) {
         lastError = new Error(`Invalid GitHub releases payload from ${url}`)
         continue
