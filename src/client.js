@@ -200,6 +200,59 @@ window.__ModuleLoader__.load({
       return useSyncExternalStore(store.subscribe, () => store.state)
     }
 
+    // ---------- Semver Utilities for Client-side Adaptation ----------
+    function parseSemver(v) {
+      if (!v || typeof v !== 'string') return null
+      const cleaned = v.trim().replace(/^[vV]/, '')
+      const match = cleaned.match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/)
+      if (!match) return null
+      return {
+        major: parseInt(match[1], 10),
+        minor: parseInt(match[2], 10),
+        patch: parseInt(match[3], 10),
+        prerelease: match[4] ? match[4].split('.') : []
+      }
+    }
+
+    function compareSemver(v1, v2) {
+      const s1 = parseSemver(v1)
+      const s2 = parseSemver(v2)
+      if (!s1 || !s2) {
+        if (s1 && !s2) return 1
+        if (!s1 && s2) return -1
+        return String(v1).localeCompare(String(v2))
+      }
+      if (s1.major !== s2.major) return s1.major > s2.major ? 1 : -1
+      if (s1.minor !== s2.minor) return s1.minor > s2.minor ? 1 : -1
+      if (s1.patch !== s2.patch) return s1.patch > s2.patch ? 1 : -1
+      const p1 = s1.prerelease
+      const p2 = s2.prerelease
+      if (p1.length === 0 && p2.length > 0) return 1
+      if (p1.length > 0 && p2.length === 0) return -1
+      if (p1.length === 0 && p2.length === 0) return 0
+      const maxLen = Math.max(p1.length, p2.length)
+      for (let i = 0; i < maxLen; i++) {
+        const id1 = p1[i]
+        const id2 = p2[i]
+        if (id1 === undefined) return -1
+        if (id2 === undefined) return 1
+        if (id1 === id2) continue
+        const isNum1 = /^\d+$/.test(id1)
+        const isNum2 = /^\d+$/.test(id2)
+        if (isNum1 && isNum2) {
+          const n1 = parseInt(id1, 10)
+          const n2 = parseInt(id2, 10)
+          if (n1 !== n2) return n1 > n2 ? 1 : -1
+          continue
+        }
+        if (isNum1 && !isNum2) return -1
+        if (!isNum1 && isNum2) return 1
+        const cmp = id1.localeCompare(id2)
+        if (cmp !== 0) return cmp > 0 ? 1 : -1
+      }
+      return 0
+    }
+
     // ---------- API Call ----------
     async function fetchUpdateStatus(force = false) {
       store.set({ loading: true })
@@ -213,6 +266,28 @@ window.__ModuleLoader__.load({
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
         if (data && data.ok) {
+          // Client-side adaptation: if backend has not restarted and lacks channels.next,
+          // dynamically build channels.next from data.distTags.next:
+          if (!data.channels?.next && data.distTags?.next) {
+            const nextVer = data.distTags.next
+            const currentVer = data.currentVersion
+            const cmp = compareSemver(nextVer, currentVer)
+            data.nextVersion = nextVer
+            data.channels = data.channels || {}
+            data.channels.next = {
+              tag: 'next',
+              version: nextVer,
+              source: 'npm',
+              updateAvailable: cmp > 0,
+              comparison: cmp,
+              upgradeCommand: 'npm install -g @deepseek-ai/dsh@next',
+              upgradeCommands: {
+                npm: 'npm install -g @deepseek-ai/dsh@next',
+                pnpm: 'pnpm add -g @deepseek-ai/dsh@next',
+                yarn: 'yarn global add @deepseek-ai/dsh@next'
+              }
+            }
+          }
           store.set({ status: data, loading: false })
         } else {
           store.set({ loading: false })
@@ -596,10 +671,18 @@ window.__ModuleLoader__.load({
       // Active channel data
       const chData = st.channels?.[selectedChannel] || {
         tag: selectedChannel,
-        version: selectedChannel === 'alpha' ? (st.alphaVersion || st.latestVersion) : (selectedChannel === 'next' ? (st.nextVersion || st.latestVersion) : st.latestVersion),
+        version: selectedChannel === 'alpha'
+          ? (st.alphaVersion || st.latestVersion)
+          : (selectedChannel === 'next'
+              ? (st.nextVersion || st.distTags?.next || st.latestVersion)
+              : st.latestVersion),
         source: selectedChannel === 'alpha' ? 'github-release' : 'npm',
-        updateAvailable: st.updateAvailable,
-        comparison: 0,
+        updateAvailable: selectedChannel === 'next'
+          ? (compareSemver(st.nextVersion || st.distTags?.next || '', st.currentVersion) > 0)
+          : st.updateAvailable,
+        comparison: selectedChannel === 'next'
+          ? compareSemver(st.nextVersion || st.distTags?.next || '', st.currentVersion)
+          : 0,
         upgradeCommand: `npm install -g @deepseek-ai/dsh@${selectedChannel}`,
         upgradeCommands: {
           npm: `npm install -g @deepseek-ai/dsh@${selectedChannel}`,
