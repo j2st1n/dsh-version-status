@@ -74,28 +74,45 @@ test('detectLocalVersion', () => {
 test('VersionService with mock parameters', async () => {
   const service = new VersionService({ cacheTtlMs: 1000 })
   
-  // Test mockLatest and mockAlpha
+  // Test mockLatest, mockNext, and mockAlpha
   const resLatest = await service.getStatus({
     channel: 'latest',
     mockLatest: '99.0.0',
+    mockNext: '99.0.5-rc.1',
     mockAlpha: '99.1.0-alpha.1'
   })
   assert.equal(resLatest.ok, true)
   assert.equal(resLatest.channel, 'latest')
   assert.equal(resLatest.latestVersion, '99.0.0')
+  assert.equal(resLatest.nextVersion, '99.0.5-rc.1')
   assert.equal(resLatest.alphaVersion, '99.1.0-alpha.1')
   assert.equal(resLatest.updateAvailable, true)
   assert.equal(resLatest.channels.latest.updateAvailable, true)
+  assert.equal(resLatest.channels.next.updateAvailable, true)
+
+  // Test next channel selection
+  const resNext = await service.getStatus({
+    channel: 'next',
+    mockLatest: '99.0.0',
+    mockNext: '99.0.5-rc.1',
+    mockAlpha: '99.1.0-alpha.1'
+  })
+  assert.equal(resNext.channel, 'next')
+  assert.equal(resNext.targetVersion, '99.0.5-rc.1')
+  assert.equal(resNext.updateAvailable, true)
+  assert.equal(resNext.upgradeCommand, 'npm install -g @deepseek-ai/dsh@next')
 
   // Test alpha channel selection
   const resAlpha = await service.getStatus({
     channel: 'alpha',
     mockLatest: '99.0.0',
+    mockNext: '99.0.5-rc.1',
     mockAlpha: '99.1.0-alpha.1'
   })
   assert.equal(resAlpha.channel, 'alpha')
   assert.equal(resAlpha.targetVersion, '99.1.0-alpha.1')
   assert.equal(resAlpha.updateAvailable, true)
+  assert.equal(resAlpha.upgradeCommand, 'npm install -g @deepseek-ai/dsh@alpha')
 })
 
 test('apply Cordis plugin registration and route invocation', async () => {
@@ -134,14 +151,17 @@ test('apply Cordis plugin registration and route invocation', async () => {
   // 1. GET request with mocks
   const fakeReqGet = {
     method: 'GET',
-    url: '/api/dsh-version?channel=alpha&mockLatest=1.0.0&mockAlpha=1.1.0-alpha.1'
+    url: '/api/dsh-version?channel=next&mockLatest=1.0.0&mockNext=1.0.5-rc.1&mockAlpha=1.1.0-alpha.1'
   }
   await handler(fakeReqGet, fakeRes)
   assert.equal(statusCode, 200)
   assert.equal(responseData.ok, true)
-  assert.equal(responseData.channel, 'alpha')
+  assert.equal(responseData.channel, 'next')
   assert.equal(responseData.latestVersion, '1.0.0')
+  assert.equal(responseData.nextVersion, '1.0.5-rc.1')
   assert.equal(responseData.alphaVersion, '1.1.0-alpha.1')
+  assert.equal(responseData.targetVersion, '1.0.5-rc.1')
+  assert.ok(responseData.channels.next)
 
   // 2. Method Not Allowed for POST
   const fakeReqPost = {

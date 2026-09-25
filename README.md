@@ -8,7 +8,7 @@ DeepSeek Harness (DSH) 版本监控与一键升级助手插件：侧边栏恒定
 ## 核心特性
 
 - **侧栏常驻胶囊**：侧边栏底部恒定显示实际运行版本，自适应展开与折叠模式，新版本发布时琥珀呼吸灯与 UPGRADE 徽标提醒。
-- **双通道与多源探测**：支持「稳定版 (Latest)」与「尝鲜版 (Alpha)」双通道切换，并行探测 GitHub Releases 与 npm registry。
+- **三通道与多源探测**：支持「稳定版 (Latest)」、「候选版 (Next)」与「尝鲜版 (Alpha)」三通道一键切换，并行探测 GitHub Releases 与 npm registry。
 - **一键升级指令卡片**：点击展开版本对比详情，一键复制对应平台的 npm / pnpm / yarn 升级或容灾 Tarball 指令。
 - **轻量零构建与离线韧性**：纯原生 JS 零构建架构，15 分钟 TTL 缓存防限流，网络超时与异常平滑降级。
 

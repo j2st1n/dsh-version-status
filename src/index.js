@@ -398,13 +398,21 @@ export async function fetchGitHubReleases(options = {}) {
       }
 
       let latestAlpha = null
+      let latestNext = null
       let latestStable = null
 
       for (const rel of parsedReleases) {
         const isAlpha = rel.version.includes('alpha') || (rel.prerelease && rel.version.includes('alpha'))
+        const isNext = rel.version.includes('next') || rel.version.includes('rc') || rel.version.includes('beta')
+
         if (isAlpha) {
           if (!latestAlpha || compareSemver(rel.version, latestAlpha.version) > 0) {
             latestAlpha = rel
+          }
+        }
+        if (isNext) {
+          if (!latestNext || compareSemver(rel.version, latestNext.version) > 0) {
+            latestNext = rel
           }
         }
         if (!rel.prerelease) {
@@ -425,9 +433,15 @@ export async function fetchGitHubReleases(options = {}) {
         }
       }
 
+      // If no specific next found, fallback to latestAlpha or highest prerelease
+      if (!latestNext) {
+        latestNext = latestAlpha
+      }
+
       return {
         releases: parsedReleases,
         latestAlpha,
+        latestNext,
         latestStable,
         githubUrl: url
       }
@@ -440,6 +454,7 @@ export async function fetchGitHubReleases(options = {}) {
   return {
     releases: [],
     latestAlpha: null,
+    latestNext: null,
     latestStable: null,
     githubUrl: endpoints[0],
     error: lastError ? lastError.message : 'GitHub API unavailable'
@@ -461,21 +476,24 @@ export class VersionService {
    * Builds update status, utilizing cache unless force is specified.
    * @param {object} [opts]
    * @param {boolean} [opts.force]
-   * @param {string} [opts.channel] 'latest' | 'alpha'
+   * @param {string} [opts.channel] 'latest' | 'next' | 'alpha'
    * @param {string} [opts.mockLatest]
+   * @param {string} [opts.mockNext]
    * @param {string} [opts.mockAlpha]
    * @param {object|null} [opts.mockGitHubRelease]
    */
   async getStatus(opts = {}) {
-    const { force = false, channel = 'latest', mockLatest, mockAlpha, mockGitHubRelease } = opts
+    const { force = false, channel = 'latest', mockLatest, mockNext, mockAlpha, mockGitHubRelease } = opts
     const now = Date.now()
 
     // If mock parameters are provided, build instant synthetic result for testing
-    if (mockLatest !== undefined || mockAlpha !== undefined || mockGitHubRelease !== undefined) {
+    if (mockLatest !== undefined || mockNext !== undefined || mockAlpha !== undefined || mockGitHubRelease !== undefined) {
       const local = detectLocalVersion()
       const effectiveLatest = mockLatest || '0.1.2-rc.1'
+      const effectiveNext = mockNext || '0.1.7-rc.2'
       let effectiveAlpha = mockAlpha
       let effectiveGh = null
+      let effectiveGhNext = null
 
       if (mockGitHubRelease !== undefined) {
         effectiveGh = mockGitHubRelease
@@ -496,16 +514,30 @@ export class VersionService {
         }
       }
 
+      if (mockNext !== undefined && mockNext) {
+        effectiveGhNext = {
+          tagName: `dsh-v${mockNext}`,
+          version: mockNext,
+          name: `v${mockNext}`,
+          prerelease: true,
+          publishedAt: '2026-09-04T11:34:32Z',
+          htmlUrl: `https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v${mockNext}`,
+          tarballUrl: `https://codeload.github.com/deepseek-ai/deepseek-harness/tar.gz/refs/tags/dsh-v${mockNext}`
+        }
+      }
+
       return this._formatResponse({
         currentVersion: local.version,
         channel,
         distTags: {
           latest: effectiveLatest,
+          next: effectiveNext,
           alpha: effectiveAlpha || '0.1.2-alpha.5'
         },
         githubData: {
-          releases: effectiveGh ? [effectiveGh] : [],
+          releases: [effectiveGh, effectiveGhNext].filter(Boolean),
           latestAlpha: effectiveGh,
+          latestNext: effectiveGhNext || (mockGitHubRelease !== undefined ? effectiveGh : null),
           latestStable: null
         },
         hasError: false,
@@ -606,6 +638,7 @@ export class VersionService {
     const distTags = data.distTags || {}
     const githubData = data.githubData || {}
     const ghAlpha = githubData.latestAlpha || null
+    const ghNext = githubData.latestNext || null
     const ghStable = githubData.latestStable || null
 
     // 1. Latest Version arbitration: compare npm latest with GitHub stable
@@ -616,7 +649,28 @@ export class VersionService {
       latestSource = 'github-release'
     }
 
-    // 2. Alpha Version arbitration: compare npm alpha with GitHub alpha
+    // 2. Next Version arbitration: compare npm next with GitHub next
+    let nextVersion = distTags.next || null
+    let nextSource = 'npm'
+    let nextReleaseTagName = null
+    let nextReleaseUrl = null
+    let nextTarballUrl = null
+
+    if (ghNext) {
+      if (!nextVersion || compareSemver(ghNext.version, nextVersion) >= 0) {
+        nextVersion = ghNext.version
+        nextSource = 'github-release'
+        nextReleaseTagName = ghNext.tagName
+        nextReleaseUrl = ghNext.htmlUrl
+        nextTarballUrl = ghNext.tarballUrl
+      }
+    }
+
+    if (!nextVersion) {
+      nextVersion = latestVersion
+    }
+
+    // 3. Alpha Version arbitration: compare npm alpha with GitHub alpha
     let alphaVersion = distTags.alpha || null
     let alphaSource = 'npm'
     let alphaReleaseTagName = null
@@ -651,7 +705,30 @@ export class VersionService {
       upgradeCommands: buildUpgradeCommands('latest')
     }
 
-    // 2. alpha channel entry
+    // 2. next channel entry
+    const nextCmp = compareSemver(nextVersion, localVersion)
+    const nextTarballCmd = nextTarballUrl
+      ? `npm install -g ${nextTarballUrl}`
+      : (nextReleaseTagName ? `npm install -g https://codeload.github.com/deepseek-ai/deepseek-harness/tar.gz/refs/tags/${nextReleaseTagName}` : null)
+
+    const nextUpgradeCmds = buildUpgradeCommands('next', nextTarballUrl)
+    if (nextTarballCmd && !nextUpgradeCmds.tarball) {
+      nextUpgradeCmds.tarball = nextTarballCmd
+    }
+
+    channels.next = {
+      tag: 'next',
+      version: nextVersion,
+      source: nextSource,
+      releaseTagName: nextReleaseTagName || null,
+      releaseUrl: nextReleaseUrl || (nextReleaseTagName ? `https://github.com/deepseek-ai/deepseek-harness/releases/tag/${nextReleaseTagName}` : DEFAULT_RELEASE_URL),
+      updateAvailable: nextCmp > 0,
+      comparison: nextCmp,
+      upgradeCommand: `npm install -g ${DSH_PACKAGE}@next`,
+      upgradeCommands: nextUpgradeCmds
+    }
+
+    // 3. alpha channel entry
     const alphaCmp = compareSemver(alphaVersion, localVersion)
     const alphaTarballCmd = alphaTarballUrl
       ? `npm install -g ${alphaTarballUrl}`
@@ -674,18 +751,20 @@ export class VersionService {
       upgradeCommands: alphaUpgradeCmds
     }
 
-    const selectedChannel = data.channel === 'alpha' ? 'alpha' : 'latest'
+    const selectedChannel = ['alpha', 'next'].includes(data.channel) ? data.channel : 'latest'
     const activeChannel = channels[selectedChannel] || channels.latest
     const targetVersion = activeChannel.version
     const updateAvailable = activeChannel.updateAvailable
 
-    const releaseUrl = activeChannel.releaseUrl || (ghAlpha ? ghAlpha.htmlUrl : DEFAULT_RELEASE_URL)
+    const activeGh = selectedChannel === 'alpha' ? ghAlpha : (selectedChannel === 'next' ? (ghNext || ghAlpha) : null)
+    const releaseUrl = activeChannel.releaseUrl || (activeGh ? activeGh.htmlUrl : DEFAULT_RELEASE_URL)
 
     return {
       ok: true,
       currentVersion: localVersion,
       channel: selectedChannel,
       latestVersion,
+      nextVersion,
       alphaVersion,
       targetVersion,
       updateAvailable,
@@ -751,10 +830,11 @@ export function apply(ctx) {
       const channel = url.searchParams.get('channel') || 'latest'
       const force = url.searchParams.has('force') || url.searchParams.has('refresh')
       const mockLatest = url.searchParams.get('mockLatest') || process.env.DSH_MOCK_LATEST_VERSION || undefined
+      const mockNext = url.searchParams.get('mockNext') || process.env.DSH_MOCK_NEXT_VERSION || undefined
       const mockAlpha = url.searchParams.get('mockAlpha') || process.env.DSH_MOCK_ALPHA_VERSION || undefined
       const mockGitHubRelease = url.searchParams.get('mockGitHubRelease') ? JSON.parse(url.searchParams.get('mockGitHubRelease')) : undefined
 
-      const status = await service.getStatus({ force, channel, mockLatest, mockAlpha, mockGitHubRelease })
+      const status = await service.getStatus({ force, channel, mockLatest, mockNext, mockAlpha, mockGitHubRelease })
       sendJson(res, 200, status)
     } catch (err) {
       sendJson(res, 500, {

@@ -19,7 +19,8 @@ window.__ModuleLoader__.load({
     function getSavedChannel() {
       try {
         const val = window.localStorage?.getItem('dsh_version_status_channel')
-        return val === 'alpha' ? 'alpha' : 'latest'
+        if (val === 'alpha' || val === 'next') return val
+        return 'latest'
       } catch {
         return 'latest'
       }
@@ -109,6 +110,7 @@ window.__ModuleLoader__.load({
       warn: 'var(--dsw-alias-state-warn-primary, #f59e0b)',
       err: 'var(--dsw-alias-state-error-primary, #ef4444)',
       purple: '#a855f7',
+      cyan: '#06b6d4',
     }
 
     // ---------- Global Store ----------
@@ -119,12 +121,13 @@ window.__ModuleLoader__.load({
         loading: false,
         copiedKey: null,
         selectedTab: 'npm', // 'npm' | 'pnpm' | 'yarn' | 'tarball'
-        selectedChannel: getSavedChannel(), // 'latest' | 'alpha'
+        selectedChannel: getSavedChannel(), // 'latest' | 'next' | 'alpha'
         status: {
           ok: true,
           currentVersion: '...',
           channel: 'latest',
           latestVersion: '...',
+          nextVersion: '...',
           alphaVersion: '...',
           targetVersion: '...',
           updateAvailable: false,
@@ -144,6 +147,19 @@ window.__ModuleLoader__.load({
                 npm: 'npm install -g @deepseek-ai/dsh@latest',
                 pnpm: 'pnpm add -g @deepseek-ai/dsh@latest',
                 yarn: 'yarn global add @deepseek-ai/dsh@latest'
+              }
+            },
+            next: {
+              tag: 'next',
+              version: '...',
+              source: 'npm',
+              updateAvailable: false,
+              comparison: 0,
+              upgradeCommand: 'npm install -g @deepseek-ai/dsh@next',
+              upgradeCommands: {
+                npm: 'npm install -g @deepseek-ai/dsh@next',
+                pnpm: 'pnpm add -g @deepseek-ai/dsh@next',
+                yarn: 'yarn global add @deepseek-ai/dsh@next'
               }
             },
             alpha: {
@@ -324,6 +340,10 @@ window.__ModuleLoader__.load({
           h('line', { x1: 8, y1: 2, x2: 16, y2: 2 }),
           h('line', { x1: 8.5, y1: 15, x2: 15.5, y2: 15 })
         ),
+      zap: () =>
+        h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+          h('polygon', { points: '13 2 3 14 12 14 11 22 21 10 12 10 13 2' })
+        ),
       star: () =>
         h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
           h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' })
@@ -337,7 +357,7 @@ window.__ModuleLoader__.load({
       const st = state.status
       const selectedChannel = state.selectedChannel
       const chData = st.channels?.[selectedChannel] || {
-        version: selectedChannel === 'alpha' ? st.alphaVersion : st.latestVersion,
+        version: selectedChannel === 'alpha' ? st.alphaVersion : (selectedChannel === 'next' ? (st.nextVersion || st.latestVersion) : st.latestVersion),
         updateAvailable: st.updateAvailable
       }
       const hasUpdate = chData.updateAvailable
@@ -359,7 +379,12 @@ window.__ModuleLoader__.load({
             ? T.err
             : T.ok
 
-      const channelPrefix = selectedChannel === 'alpha' ? 'DSH(α)' : 'DSH'
+      const channelPrefix = selectedChannel === 'alpha'
+        ? 'DSH(α)'
+        : (selectedChannel === 'next' ? 'DSH(next)' : 'DSH')
+      const channelColor = selectedChannel === 'alpha'
+        ? T.purple
+        : (selectedChannel === 'next' ? T.cyan : T.label)
       const tooltip = hasUpdate
         ? `[${selectedChannel.toUpperCase()}] 当前运行 v${st.currentVersion} · 发现新版 v${chData.version} (点击查看升级与版本对比)`
         : `[${selectedChannel.toUpperCase()}] DSH v${st.currentVersion} (已是当前通道最新)`
@@ -481,7 +506,7 @@ window.__ModuleLoader__.load({
               key: 'prefix',
               style: {
                 fontWeight: 700,
-                color: hasUpdate ? T.warn : (selectedChannel === 'alpha' ? T.purple : T.label),
+                color: hasUpdate ? T.warn : channelColor,
                 flexShrink: 0
               }
             }, channelPrefix),
@@ -534,15 +559,29 @@ window.__ModuleLoader__.load({
                       flexShrink: 0
                     }
                   }, 'α')
-                : h('span', {
-                    style: {
-                      fontSize: 10,
-                      color: T.secondary,
-                      opacity: 0.6,
-                      marginLeft: 4,
-                      flexShrink: 0
-                    }
-                  }, '✓')
+                : (selectedChannel === 'next'
+                    ? h('span', {
+                        style: {
+                          fontSize: 9,
+                          fontWeight: 600,
+                          color: T.cyan,
+                          background: 'rgba(6, 182, 212, 0.15)',
+                          padding: '1px 4px',
+                          borderRadius: 3,
+                          marginLeft: 4,
+                          flexShrink: 0
+                        }
+                      }, 'NEXT')
+                    : h('span', {
+                        style: {
+                          fontSize: 10,
+                          color: T.secondary,
+                          opacity: 0.6,
+                          marginLeft: 4,
+                          flexShrink: 0
+                        }
+                      }, '✓')
+                  )
               )
         ]
       )
@@ -557,11 +596,11 @@ window.__ModuleLoader__.load({
       // Active channel data
       const chData = st.channels?.[selectedChannel] || {
         tag: selectedChannel,
-        version: selectedChannel === 'alpha' ? (st.alphaVersion || st.latestVersion) : st.latestVersion,
+        version: selectedChannel === 'alpha' ? (st.alphaVersion || st.latestVersion) : (selectedChannel === 'next' ? (st.nextVersion || st.latestVersion) : st.latestVersion),
         source: selectedChannel === 'alpha' ? 'github-release' : 'npm',
         updateAvailable: st.updateAvailable,
         comparison: 0,
-        upgradeCommand: selectedChannel === 'alpha' ? 'npm install -g @deepseek-ai/dsh@alpha' : 'npm install -g @deepseek-ai/dsh@latest',
+        upgradeCommand: `npm install -g @deepseek-ai/dsh@${selectedChannel}`,
         upgradeCommands: {
           npm: `npm install -g @deepseek-ai/dsh@${selectedChannel}`,
           pnpm: `pnpm add -g @deepseek-ai/dsh@${selectedChannel}`,
@@ -602,7 +641,9 @@ window.__ModuleLoader__.load({
 
       // Check if other channel has update available for badge
       const latestHasUpdate = st.channels?.latest?.updateAvailable
+      const nextHasUpdate = st.channels?.next?.updateAvailable
       const alphaHasUpdate = st.channels?.alpha?.updateAvailable
+      const channelAccent = selectedChannel === 'alpha' ? T.purple : (selectedChannel === 'next' ? T.cyan : T.brand)
 
       return h(
         'div',
@@ -722,6 +763,39 @@ window.__ModuleLoader__.load({
                 }) : null
               ]),
 
+              // Next Tab
+              h('button', {
+                className: `dsh-channel-tab ${selectedChannel === 'next' ? 'active' : ''}`,
+                onClick: () => setChannel('next'),
+                style: {
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  padding: '5px 8px',
+                  borderRadius: 6,
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  fontWeight: selectedChannel === 'next' ? 600 : 400,
+                  background: selectedChannel === 'next' ? T.cyan : 'transparent',
+                  color: selectedChannel === 'next' ? '#fff' : T.secondary,
+                }
+              }, [
+                h(Icons.zap),
+                '候选版 (Next)',
+                nextHasUpdate ? h('span', {
+                  style: {
+                    width: 5,
+                    height: 5,
+                    borderRadius: '50%',
+                    background: T.warn,
+                    display: 'inline-block'
+                  }
+                }) : null
+              ]),
+
               // Alpha Tab
               h('button', {
                 className: `dsh-channel-tab ${selectedChannel === 'alpha' ? 'active' : ''}`,
@@ -784,7 +858,9 @@ window.__ModuleLoader__.load({
                     h('span', { style: { fontSize: 10, color: T.secondary } },
                       selectedChannel === 'alpha'
                         ? (chData.source === 'github-release' ? 'GitHub Releases (先行版)' : 'npm 尝鲜版本 (alpha)')
-                        : 'npm 稳定版本 (latest)'
+                        : (selectedChannel === 'next'
+                            ? (chData.source === 'github-release' ? 'GitHub Releases (候选版)' : 'npm 候选版本 (next)')
+                            : 'npm 稳定版本 (latest)')
                     ),
                     chData.source === 'github-release' ? h('span', {
                       style: {
@@ -801,7 +877,7 @@ window.__ModuleLoader__.load({
                     style: {
                       fontSize: 13,
                       fontWeight: 600,
-                      color: hasUpdate ? T.warn : (selectedChannel === 'alpha' ? T.purple : T.ok),
+                      color: hasUpdate ? T.warn : (selectedChannel === 'alpha' ? T.purple : (selectedChannel === 'next' ? T.cyan : T.ok)),
                       fontFamily: 'monospace'
                     }
                   }, `v${chData.version || '...'}`)
@@ -825,7 +901,9 @@ window.__ModuleLoader__.load({
                   comparison > 0
                     ? (selectedChannel === 'alpha'
                         ? `★ 发现新版 Alpha (v${chData.version})，可升级尝鲜体验`
-                        : `★ 发现新稳定版 (v${chData.version})，建议及时升级`)
+                        : (selectedChannel === 'next'
+                            ? `★ 发现新版 Next (v${chData.version})，可体验候选特性`
+                            : `★ 发现新稳定版 (v${chData.version})，建议及时升级`))
                     : comparison === 0
                       ? '✓ 当前运行已是此通道最新版本'
                       : 'ℹ 当前运行版本高于此通道版本'
@@ -838,7 +916,9 @@ window.__ModuleLoader__.load({
             h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }, [
               h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }, [
                 h('span', { style: { fontSize: 11, fontWeight: 500, color: T.label } },
-                  selectedChannel === 'alpha' ? 'Alpha 安装指令（一键复制）：' : '升级命令（一键复制）：'
+                  selectedChannel === 'alpha'
+                    ? 'Alpha 安装指令（一键复制）：'
+                    : (selectedChannel === 'next' ? 'Next 升级指令（一键复制）：' : '升级命令（一键复制）：')
                 ),
                 // Package Manager Tabs
                 h('div', { style: { display: 'flex', gap: 4 } }, availableTabs.map(tab =>
@@ -848,7 +928,7 @@ window.__ModuleLoader__.load({
                     onClick: () => store.set({ selectedTab: tab }),
                     style: {
                       border: 'none',
-                      background: currentTab === tab ? (selectedChannel === 'alpha' ? T.purple : T.brand) : 'rgba(255,255,255,0.06)',
+                      background: currentTab === tab ? channelAccent : 'rgba(255,255,255,0.06)',
                       color: currentTab === tab ? '#fff' : T.secondary,
                       fontSize: 10,
                       padding: '2px 7px',
