@@ -751,7 +751,7 @@ window.__ModuleLoader__.load({
                 }
               }, [
                 h(Icons.star),
-                '稳定版 (Latest)',
+                'Latest',
                 latestHasUpdate ? h('span', {
                   style: {
                     width: 5,
@@ -784,7 +784,7 @@ window.__ModuleLoader__.load({
                 }
               }, [
                 h(Icons.zap),
-                '候选版 (Next)',
+                'Next',
                 nextHasUpdate ? h('span', {
                   style: {
                     width: 5,
@@ -817,7 +817,7 @@ window.__ModuleLoader__.load({
                 }
               }, [
                 h(Icons.flask),
-                '尝鲜版 (Alpha)',
+                'Alpha',
                 alphaHasUpdate ? h('span', {
                   style: {
                     width: 5,
@@ -857,10 +857,10 @@ window.__ModuleLoader__.load({
                   h('div', { style: { display: 'flex', alignItems: 'center', gap: 4 } }, [
                     h('span', { style: { fontSize: 10, color: T.secondary } },
                       selectedChannel === 'alpha'
-                        ? (chData.source === 'github-release' ? 'GitHub Releases (先行版)' : 'npm 尝鲜版本 (alpha)')
+                        ? (chData.source === 'github-release' ? 'GitHub Releases (Alpha)' : 'npm (Alpha)')
                         : (selectedChannel === 'next'
-                            ? (chData.source === 'github-release' ? 'GitHub Releases (候选版)' : 'npm 候选版本 (next)')
-                            : 'npm 稳定版本 (latest)')
+                            ? (chData.source === 'github-release' ? 'GitHub Releases (Next)' : 'npm (Next)')
+                            : (chData.source === 'github-release' ? 'GitHub Releases (Latest)' : 'npm (Latest)'))
                     ),
                     chData.source === 'github-release' ? h('span', {
                       style: {
