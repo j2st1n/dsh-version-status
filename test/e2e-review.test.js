@@ -47,6 +47,30 @@ test('client bundle syntax and module structure', () => {
   assert.equal(typeof registeredModule.factory, 'function')
 })
 
+test('sidebar trigger ships a 220ms delayed hover preview', () => {
+  const clientCode = fs.readFileSync(path.resolve('src/client.js'), 'utf8')
+
+  // 220ms 延时弹出，不是即时显示：与 dsh-link-pulse / dsh-cpa-status 的悬停卡片一致。
+  assert.match(clientCode, /HOVER_PREVIEW_DELAY\s*=\s*220/)
+  assert.match(clientCode, /setTimeout\(\(\)\s*=>\s*\{[\s\S]*?\},\s*HOVER_PREVIEW_DELAY\)/)
+
+  // 进入 / 离开成对挂到触发器与其包裹层上。
+  assert.match(clientCode, /onMouseEnter:\s*onTriggerEnter/)
+  assert.match(clientCode, /onMouseLeave:\s*onTriggerLeave/)
+
+  // 主面板已打开时两种触发器都不渲染悬停卡片，避免与面板重叠。
+  assert.match(clientCode, /if \(!hovering \|\| state\.open\) return pill/)
+  assert.match(clientCode, /if \(!hovering \|\| state\.open\) return railButton/)
+
+  // 展开态沿用参考实现的绝对定位；折叠 rail 先测量再用 fixed 定位，避免被侧栏 overflow 裁切。
+  assert.match(clientCode, /bottom:\s*'calc\(100% \+ 6px\)'/)
+  assert.match(clientCode, /getBoundingClientRect/)
+  assert.match(clientCode, /width:\s*HOVER_PREVIEW_WIDTH/)
+
+  // 卡片内容取自 store 已有字段。
+  assert.match(clientCode, /formatTime\(st\.checkedAt\)/)
+})
+
 test('VersionService response contract against README specification', async () => {
   const service = new VersionService()
   const res = await service.getStatus({

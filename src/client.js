@@ -425,6 +425,228 @@ window.__ModuleLoader__.load({
         )
     }
 
+    // ---------- Hover Preview (220ms delayed, same cadence as dsh-link-pulse / dsh-cpa-status) ----------
+    // 只读预览：当前通道与运行版本、该通道最新版、上次检查时间、三通道一览。
+    // 220ms 延时避免鼠标划过侧栏时闪卡；卡片只展示 store 里真实已有的字段，不推测版本。
+    const HOVER_PREVIEW_DELAY = 220
+    const HOVER_PREVIEW_WIDTH = 236
+
+    const PREVIEW_CHANNELS = [
+      { tag: 'latest', label: 'Latest', color: T.brand },
+      { tag: 'next', label: 'Next', color: T.cyan },
+      { tag: 'alpha', label: 'Alpha', color: T.purple }
+    ]
+
+    function previewChannel(tag) {
+      return PREVIEW_CHANNELS.find((ch) => ch.tag === tag) || PREVIEW_CHANNELS[0]
+    }
+
+    // 首屏检查返回前 currentVersion / 各通道 version 仍是占位符 '...'，不能当成真实版本展示。
+    function formatVersion(version) {
+      const text = typeof version === 'string' ? version.trim() : ''
+      return text && text !== '...' ? `v${text}` : '未获取'
+    }
+
+    function HoverPreview(props) {
+      const { st, selectedChannel, chData, hasUpdate, loading, style } = props
+      const activeChannel = previewChannel(selectedChannel)
+      const chVersion = typeof chData.version === 'string' ? chData.version : ''
+      const comparison = typeof chData.comparison === 'number'
+        ? chData.comparison
+        : compareSemver(chVersion, st.currentVersion)
+
+      let stateText = '已是最新'
+      let stateColor = T.ok
+      if (st.hasError) {
+        stateText = '检查失败'
+        stateColor = T.err
+      } else if (!st.checkedAt) {
+        stateText = loading ? '检查中…' : '未检查'
+        stateColor = T.secondary
+      } else if (hasUpdate) {
+        stateText = '可升级'
+        stateColor = T.warn
+      } else if (comparison < 0) {
+        stateText = '高于该通道'
+        stateColor = T.secondary
+      }
+
+      const infoRow = (key, label, valueEl) =>
+        h(
+          'div',
+          { key, style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 } },
+          h('span', { style: { fontSize: 10, color: T.secondary, flexShrink: 0 } }, label),
+          valueEl
+        )
+
+      const versionValue = (key, text, color, title) =>
+        h(
+          'span',
+          {
+            key,
+            title,
+            style: {
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: 'monospace',
+              fontVariantNumeric: 'tabular-nums',
+              color,
+              minWidth: 0,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }
+          },
+          text
+        )
+
+      const channelCells = PREVIEW_CHANNELS.map((ch) => {
+        const channelData = st.channels?.[ch.tag]
+        const available = !!channelData?.updateAvailable
+        return h(
+          'div',
+          {
+            key: `ch-${ch.tag}`,
+            style: {
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              minWidth: 0,
+              padding: '3px 5px',
+              borderRadius: 5,
+              background: ch.tag === selectedChannel ? 'rgba(255, 255, 255, 0.06)' : 'transparent'
+            }
+          },
+          [
+            h(
+              'span',
+              {
+                key: 'label',
+                style: {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  fontSize: 9,
+                  fontWeight: 600,
+                  color: available ? T.warn : ch.color
+                }
+              },
+              [
+                available
+                  ? h('span', { key: 'dot', style: { width: 4, height: 4, borderRadius: '50%', background: T.warn, display: 'inline-block', flexShrink: 0 } })
+                  : null,
+                ch.label
+              ]
+            ),
+            h(
+              'span',
+              {
+                key: 'version',
+                title: channelData?.version ? `v${channelData.version}` : '未获取',
+                style: {
+                  fontSize: 10,
+                  color: available ? T.warn : T.secondary,
+                  fontVariantNumeric: 'tabular-nums',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }
+              },
+              formatVersion(channelData?.version)
+            )
+          ]
+        )
+      })
+
+      return h(
+        'div',
+        {
+          className: 'dsh-update-panel-enter',
+          style: {
+            background: T.bg,
+            border: `1px solid ${T.border2}`,
+            borderRadius: 10,
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+            padding: '10px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            fontSize: 11,
+            lineHeight: 1.45,
+            color: T.label,
+            boxSizing: 'border-box',
+            maxWidth: 'calc(100vw - 16px)',
+            // 错误行等动态内容可能把卡片撑高；rail 卡片底部锚定，不限高会顶出视口。
+            maxHeight: 'min(360px, 60vh)',
+            overflowY: 'auto',
+            zIndex: 100,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            ...style
+          }
+        },
+        [
+          h('div', { key: 'head', style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } }, [
+            h('span', { key: 'title', style: { fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' } }, 'DSH 版本状态'),
+            h(
+              'span',
+              {
+                key: 'channel',
+                style: {
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: activeChannel.color,
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: `1px solid ${T.border}`,
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  flexShrink: 0
+                }
+              },
+              activeChannel.label
+            ),
+            h(
+              'span',
+              { key: 'state', style: { marginLeft: 'auto', fontSize: 10, fontWeight: 600, color: stateColor, whiteSpace: 'nowrap' } },
+              stateText
+            )
+          ]),
+          h('div', { key: 'rows', style: { display: 'flex', flexDirection: 'column', gap: 3, borderTop: `1px dashed ${T.border}`, paddingTop: 6 } }, [
+            infoRow('current', '当前运行', versionValue('current-v', formatVersion(st.currentVersion), T.label, formatVersion(st.currentVersion))),
+            infoRow('channel-latest', '通道最新', versionValue('channel-v', formatVersion(chVersion), hasUpdate ? T.warn : T.label, formatVersion(chVersion))),
+            infoRow(
+              'checked',
+              '上次检查',
+              h(
+                'span',
+                { key: 'checked-v', style: { fontSize: 10, color: T.secondary, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } },
+                loading ? '检查中…' : formatTime(st.checkedAt)
+              )
+            )
+          ]),
+          h(
+            'div',
+            {
+              key: 'channels',
+              style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4, borderTop: `1px dashed ${T.border}`, paddingTop: 6 }
+            },
+            channelCells
+          ),
+          st.hasError
+            ? h(
+                'div',
+                { key: 'error', style: { fontSize: 10, color: T.err, wordBreak: 'break-word' } },
+                `版本检查失败：${st.errorMessage || '未知原因'}`
+              )
+            : null,
+          h(
+            'div',
+            { key: 'hint', style: { fontSize: 9, color: T.secondary, opacity: 0.85 } },
+            '点击打开完整面板：三通道对比与升级命令'
+          )
+        ]
+      )
+    }
+
     // ---------- Component: Footer Capsule Entry ----------
     function FooterEntry(props) {
       const state = useStore()
@@ -437,6 +659,41 @@ window.__ModuleLoader__.load({
       }
       const hasUpdate = chData.updateAvailable
       const isFolded = wide === false
+
+      const [hovering, setHovering] = useState(false)
+      const [hoverPos, setHoverPos] = useState(null)
+      const hoverTimerRef = useRef(null)
+      const triggerRef = useRef(null)
+
+      useEffect(() => () => clearTimeout(hoverTimerRef.current), [])
+
+      // 悬停 220ms 后才置 hovering，移出立即收起；面板打开时由渲染分支直接隐藏卡片。
+      const onTriggerEnter = () => {
+        clearTimeout(hoverTimerRef.current)
+        hoverTimerRef.current = setTimeout(() => {
+          if (isFolded) {
+            // 折叠 rail 只有 32px 宽，且侧栏列（overflow: hidden）会裁掉绝对定位卡片，
+            // 所以展开前先量触发器位置，用 fixed 定位把卡片放到图标上方的可读区域。
+            const rect = triggerRef.current?.getBoundingClientRect?.()
+            if (rect) {
+              const viewportWidth = window.innerWidth || 0
+              let left = Math.round(rect.left)
+              if (viewportWidth > 0 && left + HOVER_PREVIEW_WIDTH > viewportWidth - 8) {
+                left = Math.max(8, viewportWidth - HOVER_PREVIEW_WIDTH - 8)
+              }
+              setHoverPos({
+                left,
+                bottom: Math.max(8, Math.round((window.innerHeight || 0) - rect.top + 6))
+              })
+            }
+          }
+          setHovering(true)
+        }, HOVER_PREVIEW_DELAY)
+      }
+      const onTriggerLeave = () => {
+        clearTimeout(hoverTimerRef.current)
+        setHovering(false)
+      }
 
       // On mount: fetch initial status if not yet loaded
       useEffect(() => {
@@ -466,11 +723,14 @@ window.__ModuleLoader__.load({
 
       // Folded Rail (Compact Icon) Mode
       if (isFolded) {
-        return h(
+        const railButton = h(
           'button',
           {
+            ref: triggerRef,
             className: 'dsh-update-btn',
             onClick: toggleOpen,
+            onMouseEnter: onTriggerEnter,
+            onMouseLeave: onTriggerLeave,
             title: tooltip,
             style: {
               width: 32,
@@ -512,15 +772,42 @@ window.__ModuleLoader__.load({
             }) : null
           ]
         )
+
+        if (!hovering || state.open) return railButton
+
+        return h(
+          'div',
+          {
+            style: { position: 'relative', width: '100%' },
+            onMouseEnter: onTriggerEnter,
+            onMouseLeave: onTriggerLeave,
+          },
+          railButton,
+          h(HoverPreview, {
+            st,
+            selectedChannel,
+            chData,
+            hasUpdate,
+            loading: state.loading,
+            style: {
+              position: 'fixed',
+              left: hoverPos ? hoverPos.left : 8,
+              bottom: hoverPos ? hoverPos.bottom : 8,
+              width: HOVER_PREVIEW_WIDTH,
+            }
+          })
+        )
       }
 
       // Expanded Sidebar (Full Pill Capsule) Mode:
       // Capsule text is constantly pinned to current running version (v${st.currentVersion})!
-      return h(
+      const pill = h(
         'div',
         {
           className: 'dsh-update-pill dsh-update-btn',
           onClick: toggleOpen,
+          onMouseEnter: onTriggerEnter,
+          onMouseLeave: onTriggerLeave,
           title: tooltip,
           style: {
             display: 'flex',
@@ -660,6 +947,27 @@ window.__ModuleLoader__.load({
               )
         ]
       )
+
+      if (!hovering || state.open) return pill
+
+      return h(
+        'div',
+        {
+          style: { position: 'relative', width: '100%' },
+          onMouseEnter: onTriggerEnter,
+          onMouseLeave: onTriggerLeave,
+        },
+        pill,
+        h(HoverPreview, {
+          st,
+          selectedChannel,
+          chData,
+          hasUpdate,
+          loading: state.loading,
+          // 与 dsh-link-pulse / dsh-cpa-status 一致：卡片绝对定位在触发器上方。
+          style: { position: 'absolute', left: 0, right: 0, bottom: 'calc(100% + 6px)' }
+        })
+      )
     }
 
     // ---------- Component: Overlay Panel ----------
@@ -739,6 +1047,8 @@ window.__ModuleLoader__.load({
             bottom: 54,
             width: 378,
             maxWidth: 'calc(100vw - 24px)',
+            // 短视口下不限高会从顶部裁切且无法滚动（卡片贴底生长）。
+            maxHeight: 'calc(100vh - 80px)',
             background: T.bg,
             border: `1px solid ${T.border}`,
             borderRadius: 14,
@@ -801,7 +1111,7 @@ window.__ModuleLoader__.load({
           ]),
 
           // Body Content
-          h('div', { style: { padding: '14px', display: 'flex', flexDirection: 'column', gap: 12 } }, [
+          h('div', { style: { padding: '14px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflowY: 'auto' } }, [
             // Channel Switcher Segmented Control
             h('div', {
               style: {
